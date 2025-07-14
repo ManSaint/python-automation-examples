@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=password
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=UTC
+      - N8N_LOG_LEVEL=info
+      - N8N_METRICS=true
+      - N8N_DIAGNOSTICS_ENABLED=true
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n_workflows:/home/node/.n8n/workflows
+      - ./data:/home/node/data
+    networks:
+      - automation_network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:5678/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  python-webhook:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.webhook
+    container_name: python-webhook
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - LOG_LEVEL=INFO
+      - WEBHOOK_HOST=0.0.0.0
+      - WEBHOOK_PORT=5000
+      - MAX_RETRIES=3
+      - TIMEOUT=30
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+      - ./data:/app/data
+      # Mount directories for file organization
+      - ./test_files:/app/test_files
+    networks:
+      - automation_network
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=n8n
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=n8n_password
+      - POSTGRES_NON_ROOT_USER=n8n
+      - POSTGRES_NON_ROOT_PASSWORD=n8n_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - automation_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - automation_network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --pass redis_password ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: File browser for managing files
+  filebrowser:
+    image: filebrowser/filebrowser:latest
+    container_name: filebrowser
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./data:/srv/data
+      - ./temp:/srv/temp
+      - ./test_files:/srv/test_files
+      - ./logs:/srv/logs:ro
+    environment:
+      - FB_BASEURL=/files
+    networks:
+      - automation_network
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - automation_network
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - automation_network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+volumes:
+  n8n_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  automation_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

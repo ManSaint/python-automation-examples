@@ -1,0 +1,162 @@
+{
+  "name": "Python Automation Integration Demo",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "python-automation-demo",
+        "httpMethod": "POST",
+        "responseData": "allEntries",
+        "responseMode": "lastNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-webhook:5000/organize-files",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"directory\": \"{{ $json.directory || '/tmp/test_files' }}\",\n  \"dry_run\": {{ $json.dry_run || true }},\n  \"recursive\": {{ $json.recursive || false }},\n  \"target_directory\": \"{{ $json.target_directory || '' }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "onError": "continueRegularOutput"
+      },
+      "id": "organize-files",
+      "name": "Organize Files",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-condition",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-organization-success",
+      "name": "Check Organization Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://python-webhook:5000/scrape-website",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"https://news.ycombinator.com\",\n  \"selector\": \".titleline > a\",\n  \"dynamic\": false\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "onError": "continueRegularOutput"
+      },
+      "id": "scrape-news",
+      "name": "Scrape Latest News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Process automation results and create summary\nconst fileOrganizationResult = $input.first().json;\nconst newsScrapingResult = $input.all()[1]?.json || {};\n\n// Extract file organization stats\nconst orgStats = fileOrganizationResult.result || {};\nconst filesProcessed = orgStats.files_processed || 0;\nconst filesMoved = orgStats.files_moved || 0;\nconst filesSkipped = orgStats.files_skipped || 0;\nconst errors = orgStats.errors || 0;\n\n// Extract news data\nconst newsData = newsScrapingResult.data || [];\nconst newsCount = Array.isArray(newsData) ? newsData.length : 0;\nconst topHeadlines = Array.isArray(newsData) ? newsData.slice(0, 5) : [];\n\n// Create comprehensive summary\nconst summary = {\n  timestamp: new Date().toISOString(),\n  automation_session: {\n    file_organization: {\n      success: fileOrganizationResult.success || false,\n      files_processed: filesProcessed,\n      files_moved: filesMoved,\n      files_skipped: filesSkipped,\n      errors: errors,\n      efficiency: filesProcessed > 0 ? ((filesMoved / filesProcessed) * 100).toFixed(1) + '%' : '0%'\n    },\n    news_scraping: {\n      success: newsScrapingResult.success || false,\n      headlines_found: newsCount,\n      top_headlines: topHeadlines\n    }\n  },\n  overall_status: {\n    success: (fileOrganizationResult.success && newsScrapingResult.success),\n    total_operations: 2,\n    successful_operations: [fileOrganizationResult.success, newsScrapingResult.success].filter(Boolean).length\n  },\n  next_actions: [\n    filesProcessed > 0 ? 'File organization completed successfully' : 'No files found to organize',\n    newsCount > 0 ? `${newsCount} news headlines scraped` : 'News scraping failed',\n    'Summary report generated and ready for notification'\n  ]\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "process-results",
+      "name": "Process Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Organize Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Organize Files": {
+      "main": [
+        [
+          {
+            "node": "Check Organization Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Organization Success": {
+      "main": [
+        [
+          {
+            "node": "Scrape Latest News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Latest News": {
+      "main": [
+        [
+          {
+            "node": "Process Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
