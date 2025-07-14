@@ -1,0 +1,64 @@
+# Core Python automation dependencies
+
+# Web automation and scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+selenium>=4.15.0
+urllib3>=2.0.0
+
+# Email and communication
+Jinja2>=3.1.0
+markupsafe>=2.1.0
+
+# File and data processing
+pandas>=2.1.0
+numpy>=1.24.0
+openpyxl>=3.1.0
+PyPDF2>=3.0.0
+
+# Configuration and utilities
+PyYAML>=6.0
+click>=8.1.0
+python-dotenv>=1.0.0
+
+# Logging and monitoring
+psutil>=5.9.0
+
+# Date and time
+python-dateutil>=2.8.0
+
+# HTTP and API clients
+httpx>=0.24.0
+
+# JSON and data serialization
+orjson>=3.9.0
+
+# Cryptography and security
+cryptography>=41.0.0
+
+# Async support
+aiohttp>=3.8.0
+aiofiles>=23.2.0
+
+# Database connectivity (optional)
+psycopg2-binary>=2.9.0
+SQLAlchemy>=2.0.0
+
+# Task scheduling
+APScheduler>=3.10.0
+
+# Validation
+pydantic>=2.4.0
+
+# Progress bars
+tqdm>=4.66.0
+
+# Image processing (optional)
+Pillow>=10.0.0
+
+# Command line interface
+rich>=13.5.0
+typer>=0.9.0
+
+# Web framework
+Flask>=2.3.0
